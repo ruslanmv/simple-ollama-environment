@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simple-environment"
+version = "0.1.0"
+description = "Minimal environment for Jupyter Notebook (Python 3.11) with Ollama client."
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "notebook",
+  "ipykernel",
+  "ollama",
+]
+
+[tool.setuptools]
+packages = []
