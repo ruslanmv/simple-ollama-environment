@@ -68,6 +68,16 @@ make install-ollama     # attempts OS-specific install
 ollama pull qwen2.5:0.5b-instruct
 ```
 
+## 🐳  Option C: Remote Docker (prebuilt images)
+
+### Pull the main image
+
+**Docker Hub**
+```bash
+docker pull docker.io/ruslanmv/simple-ollama-environment:latest
+# or a specific release:
+docker pull docker.io/ruslanmv/simple-ollama-environment:v0.1.0
+
 ---
 
 ## 🧪 Example Inference (from the notebook)
