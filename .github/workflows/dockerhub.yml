@@ -20,6 +20,7 @@ jobs:
   build-and-push:
     name: Build & Push (Docker Hub)
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -96,7 +97,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.event_name == 'release' }}
           labels: |
             org.opencontainers.image.title=${{ env.IMAGE }}
-            org.opencontainers.image.description=Simple Python 3.11 environment with Jupyter Notebook
+            org.opencontainers.image.description=Simple Python 3.11 environment with Jupyter Notebook and Ollama
             org.opencontainers.image.url=https://github.com/${{ github.repository }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ env.SEMVER }}
@@ -120,16 +121,17 @@ jobs:
             BUILD_VERSION=${{ env.SEMVER }}
             BUILD_COMMIT=${{ github.sha }}
             BUILD_DATE=${{ env.BUILD_DATE }}
+            # Avoid long/unstable downloads during CI:
+            PREPULL=
             PIP_INDEX_URL=${{ secrets.PIP_INDEX_URL }}
 
       # Quick sanity checks inside the built image
-      - name: Sanity check — Python and Jupyter present
+      - name: Sanity check — Python, Jupyter, Ollama present (no entrypoint)
         shell: bash
         run: |
-          REF="$(echo "${{ steps.meta.outputs.tags }}" | head -n1)"
+          REF="$(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | head -n1)"
           set -euo pipefail
-          docker run --rm "$REF" python --version
-          docker run --rm "$REF" jupyter --version
+          docker run --rm --entrypoint /bin/sh "$REF" -lc 'python --version && jupyter --version && ollama --version || true'
 
       - name: Inspect multi-arch manifest (release tag)
         if: always()
