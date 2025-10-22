@@ -77,7 +77,7 @@ ollama pull qwen2.5:0.5b-instruct
 docker pull docker.io/ruslanmv/simple-ollama-environment:latest
 # or a specific release:
 docker pull docker.io/ruslanmv/simple-ollama-environment:v0.1.0
-
+```
 ---
 
 ## 🧪 Example Inference (from the notebook)
