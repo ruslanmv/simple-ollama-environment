@@ -23,7 +23,7 @@ This repository provides a minimal, reproducible Python **3.11** environment wit
 - **Jupyter-ready**: `make install` registers a kernel named **Python 3.11 (simple-env)**.
 - **Automation**: a cross-platform `Makefile` (Windows/macOS/Linux) manages everything.
 
-![](assets/2025-10-13-18-55-21.png)
+![](assets/2025-10-22-09-50-06.png)
 
 ---
 
