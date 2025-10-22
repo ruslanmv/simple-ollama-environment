@@ -59,7 +59,8 @@ DOCKER_PORT_OLLAMA ?= 11434
 .PHONY: help venv install pip-install dev uv-install update test lint fmt check shell clean distclean \
         clean-venv build-container run-container stop-container remove-container logs \
         check-python check-pyproject check-uv python-version \
-        install-ollama check-ollama notebook pull-model ollama-test
+        install-ollama check-ollama notebook pull-model ollama-test \
+        ensure-ollama-running
 
 # =============================================================================
 #  Helper Scripts (exported env vars; expanded by the shell)
@@ -68,8 +69,8 @@ DOCKER_PORT_OLLAMA ?= 11434
 export HELP_SCRIPT
 define HELP_SCRIPT
 import re, sys, io
-print('Usage: make <target> [OPTIONS...]\\n')
-print('Available targets:\\n')
+print('Usage: make <target> [OPTIONS...]\n')
+print('Available targets:\n')
 mf = '$(firstword $(MAKEFILE_LIST))'
 with io.open(mf, 'r', encoding='utf-8', errors='ignore') as f:
     for line in f:
@@ -109,28 +110,25 @@ endif
 
 # --- Local Python Environment ---
 
+# Create the venv only if it doesn't exist (do NOT wipe after uv sync)
 ifeq ($(OS),Windows_NT)
-$(VENV): check-python
-	@echo "Creating virtual environment at $(VENV)..."
-	# Kill stray python.exe using cmd.exe to handle || operator correctly
-	@& $$env:ComSpec /c "taskkill /F /IM python.exe >NUL 2>&1 || exit 0"
-	@Start-Sleep -Milliseconds 300
-	@if (Test-Path '$(VENV)'){ Remove-Item -Recurse -Force '$(VENV)' -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 200 }
-	@& $(PYTHON) -m venv '$(VENV)'
-	@& '$(VENV)\Scripts\python.exe' -m pip install --upgrade pip
-	@& '$(VENV)\Scripts\python.exe' -V | % { "✅ Created $(VENV) with $$_" }
+$(VENV):
+	@if (-not (Test-Path '$(VENV)')) { \
+		Write-Host "Creating virtual environment at $(VENV)..."; \
+		& $(PYTHON) -m venv '$(VENV)'; \
+		& '$(VENV)\Scripts\python.exe' -m pip install -U pip; \
+		& '$(VENV)\Scripts\python.exe' -V | %% { "✅ Created $(VENV) with $$_" }; \
+	} else { Write-Host "ℹ️ Virtual environment exists: $(VENV)"; }
 else
-$(VENV): check-python
-	@echo "Creating virtual environment at $(VENV)..."
-	@$(PYTHON) -m venv --clear "$(VENV)" || { rm -rf "$(VENV)"; $(PYTHON) -m venv "$(VENV)"; }
-	@"$(VENV)/bin/python" -m pip install --upgrade pip
-	@echo "✅ Created $(VENV) with $$("$(VENV)/bin/python" -V)"
+$(VENV):
+	@echo "Ensuring virtual environment exists at $(VENV)..."
+	@[ -d "$(VENV)" ] || { $(PYTHON) -m venv "$(VENV)"; "$(VENV)/bin/python" -m pip install -U pip; echo "✅ Created $(VENV)"; }
 endif
 
-venv: $(VENV) ## [pip] Create the virtual environment if it does not exist
+venv: $(VENV) ## Ensure the virtual environment exists
 
-# --- Unified install: Python deps + register kernel + Ollama host install (best-effort) ---
-install: uv-install notebook install-ollama ## Install Python deps & Jupyter kernel, then install Ollama (host) if missing
+# --- Unified install: Python deps + register kernel + Ollama host install + server check ---
+install: venv uv-install notebook install-ollama ensure-ollama-running ## Install Python deps & Jupyter kernel, then install/start Ollama
 
 dev: uv-install ## Install project in dev mode using uv (default)
 
@@ -138,26 +136,30 @@ pip-install: venv check-pyproject ## [pip] Install project in non-editable mode
 	@$(PIP_EXE) install .
 	@echo "✅ Installed project into $(VENV) using pip"
 
-uv-install: check-pyproject ## [uv] Create venv & install all dependencies
+uv-install: check-pyproject venv ## [uv] Create/sync deps INTO .venv
 ifeq ($(OS),Windows_NT)
-	@echo "Syncing environment with uv..."
-	@$$uvCmd = (Get-Command uv -ErrorAction SilentlyContinue); if (-not $$uvCmd) { $$uvCmd = Join-Path $$env:USERPROFILE '.local\bin\uv.exe' }; if (Test-Path $$uvCmd) { & $$uvCmd sync } else { Write-Host 'Error: uv not found. Please run `make check-uv` to install it.'; exit 1 }
-	@echo "Done! To activate the environment, run:"
-	@echo "   .\$(VENV)\Scripts\Activate.ps1"
+	@echo "Syncing environment with uv into $(VENV)..."
+	@$$uvCmd = (Get-Command uv -ErrorAction SilentlyContinue); if (-not $$uvCmd) { $$uvCmd = Join-Path $$env:USERPROFILE '.local\bin\uv.exe' }; if (-not (Test-Path $$uvCmd)) { Write-Host 'Error: uv not found. Run `make check-uv` to install it.'; exit 1 }
+	@$$env:UV_PROJECT_ENVIRONMENT = '$(VENV)'; & $$uvCmd sync
+	@echo "✅ Done! To activate the environment, run:`n   .\\$(VENV)\\Scripts\\Activate.ps1"
 else
-	@echo "Syncing environment with uv..."
-	@uv sync
-	@echo "✅ Done! To activate the environment, run:"
-	@echo "   source $(VENV)/bin/activate"
+	@echo "Syncing environment with uv into $(VENV)..."
+	@UV_PROJECT_ENVIRONMENT=$(VENV) uv sync
+	@echo -e "✅ Done! To activate the environment, run:\n   source $(VENV)/bin/activate"
 endif
 
 update: check-pyproject ## Upgrade/sync dependencies (prefers uv if available)
 ifeq ($(OS),Windows_NT)
-	@$$uvCmd = (Get-Command uv -ErrorAction SilentlyContinue); if (-not $$uvCmd) { $$uvCmd = Join-Path $$env:USERPROFILE '.local\bin\uv.exe' }; if (Test-Path $$uvCmd) { Write-Host 'Syncing with uv...'; & $$uvCmd sync } else { Write-Host 'uv not found, falling back to pip...'; if (-not (Test-Path '$(VENV)\Scripts\python.exe')) { & $(PYTHON) -m venv '$(VENV)'; & '$(VENV)\Scripts\python.exe' -m pip install -U pip }; & '$(VENV)\Scripts\python.exe' -m pip install -U -e ".[dev]"; Write-Host '✅ Project and dependencies upgraded (pip fallback)'; }
+	@$$uvCmd = (Get-Command uv -ErrorAction SilentlyContinue); if (-not $$uvCmd) { $$uvCmd = Join-Path $$env:USERPROFILE '.local\bin\uv.exe' }; if (Test-Path $$uvCmd) { \
+		Write-Host 'Syncing with uv...'; $$env:UV_PROJECT_ENVIRONMENT = '$(VENV)'; & $$uvCmd sync; \
+	} else { \
+		Write-Host 'uv not found, falling back to pip...'; if (-not (Test-Path '$(VENV)\Scripts\python.exe')) { & $(PYTHON) -m venv '$(VENV)'; & '$(VENV)\Scripts\python.exe' -m pip install -U pip }; \
+		& '$(VENV)\Scripts\python.exe' -m pip install -U -e ".[dev]"; \
+		Write-Host '✅ Project and dependencies upgraded (pip fallback)'; \
+	}
 else
 	@if command -v uv >$(NULL_DEVICE) 2>&1; then \
-		echo "Syncing with uv..."; \
-		uv sync; \
+		echo "Syncing with uv..."; UV_PROJECT_ENVIRONMENT=$(VENV) uv sync; \
 	else \
 		echo "uv not found, falling back to pip..."; \
 		[ -x "$(VENV)/bin/python" ] || $(PYTHON) -m venv "$(VENV)"; \
@@ -203,6 +205,24 @@ else
 	fi
 endif
 
+# Try to start the server and wait until it responds on 127.0.0.1:11434
+ensure-ollama-running: ## Start Ollama server (best-effort) and verify API is reachable
+ifeq ($(OS),Windows_NT)
+	@if (Get-Command ollama -ErrorAction SilentlyContinue) { \
+		Write-Host '▶️  Starting Ollama server (background)...'; \
+		Start-Process -FilePath ollama -ArgumentList 'serve' -WindowStyle Hidden; \
+		$ok=$false; for($i=0; $i -lt 60; $i++){ try { iwr http://127.0.0.1:11434/api/tags -UseBasicParsing | Out-Null; $ok=$true; break } catch { Start-Sleep -Milliseconds 500 } }; \
+		if($ok){ echo '✅ Ollama server is up: http://127.0.0.1:11434'; } else { echo '⚠️ Could not reach Ollama on 11434. Start it manually or check firewall.'; } \
+	} else { echo '⚠️ Ollama not installed'; exit 1 }
+else
+	@command -v ollama >/dev/null 2>&1 || { echo "⚠️ Ollama not installed"; exit 1; }
+	@echo "▶️  Starting Ollama server (background, best-effort)..."
+	@pkill -f "ollama serve" >/dev/null 2>&1 || true
+	@nohup ollama serve >/tmp/ollama.log 2>&1 &
+	@ok=0; for i in $$(seq 1 60); do curl -fsS http://127.0.0.1:11434/api/tags >/dev/null && ok=1 && break || sleep 0.5; done; \
+	if [ "$$ok" = "1" ]; then echo "✅ Ollama server is up: http://127.0.0.1:11434"; else echo "⚠️ Could not reach Ollama on 11434. Start it manually or check firewall."; fi
+endif
+
 # --- Quick pull + test against local Ollama ---
 pull-model: ## Pull a tiny model for quick tests (host Ollama)
 	@echo "📥 Pulling qwen2.5:0.5b-instruct..."
@@ -213,14 +233,14 @@ ollama-test: venv ## Run a tiny Python chat against local Ollama
 	@$(PY_EXE) - <<'PY'\
 import sys, json\
 try:\
-    import ollama\
+	import ollama\
 except Exception as e:\
-    print('Missing python client: pip install ollama'); sys.exit(1)\
+	print('Missing python client: pip install ollama'); sys.exit(1)\
 try:\
-    r=ollama.chat(model='qwen2.5:0.5b-instruct', messages=[{'role':'user','content':'Di\\' solo \\'Ciao!\\''}])\
-    print(r['message']['content'])\
+	r=ollama.chat(model='qwen2.5:0.5b-instruct', messages=[{'role':'user','content':'Di\' solo \'Ciao!\''}])\
+	print(r['message']['content'])\
 except Exception as e:\
-    print('⚠️ Chat failed:', e)\
+	print('⚠️ Chat failed:', e)\
 PY
 
 # --- Docker (helpers) ---

@@ -145,6 +145,41 @@ ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 ```
 </details>
 
+
+## Quickstart
+
+To run and chat with a small model:
+
+```shell
+ollama run qwen2.5:0.5b-instruct
+```
+
+Or Llama 3.2 (1B variant):
+
+```shell
+ollama run llama3.2:1b
+```
+
+## Model library
+
+Ollama supports many models in the online library.
+
+Examples:
+
+| Model            | Parameters | Size  | Download                     |
+| ---------------- | ---------- | ----- | ---------------------------- |
+| Gemma 3          | 1B         | 815MB | `ollama run gemma3:1b`       |
+| Gemma 3          | 4B         | 3.3GB | `ollama run gemma3`          |
+| Llama 3.2        | 1B         | 1.3GB | `ollama run llama3.2:1b`     |
+| Llama 3.2        | 3B         | 2.0GB | `ollama run llama3.2`        |
+| Llama 3.2 Vision | 11B        | 7.9GB | `ollama run llama3.2-vision` |
+| Phi 4 Mini       | 3.8B       | 2.5GB | `ollama run phi4-mini`       |
+| Mistral          | 7B         | 4.1GB | `ollama run mistral`         |
+| Moondream 2      | 1.4B       | 829MB | `ollama run moondream`       |
+
+> **Guidance:** ~8 GB free RAM for 7B; ~16 GB for 13B; ~32 GB for 33B. On 8 GB laptops, stick to 0.5B–1B models for best experience.
+
+
 ---
 
 ## OS-Specific Notes (Local)

@@ -4,14 +4,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "simple-environment"
-version = "0.1.0"
+version = "0.1.1"                               # bump so installers don't cache 0.1.0
 description = "Minimal environment for Jupyter Notebook (Python 3.11) with Ollama client."
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.11,<3.13"
+
+# Core runtime deps — the Ollama *Python client* is 'ollama'
 dependencies = [
-  "notebook",
-  "ipykernel",
-  "ollama",
+  "notebook>=7.2",                              # modern Notebook
+  "ipykernel>=6.29",
+  "ollama>=0.6,<1.0",                           # pin to a stable client range
 ]
 
+# Optional bundles you can install with: pip install .[dev] or uv add .[dev]
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.6",
+  "pytest>=8.2",
+]
+lab = [
+  "jupyterlab>=4.2",
+]
+
+# 🚫 Prevent setuptools from auto-finding random local packages
 [tool.setuptools]
 packages = []
