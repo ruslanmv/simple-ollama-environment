@@ -49,7 +49,103 @@ make run-container
 
 ---
 
-### Option B — Local (Virtualenv + Host Ollama)
+## 🐳 Option 3: Remote Docker (prebuilt images)
+
+### Pull the main image
+
+**Docker Hub**
+```bash
+docker pull docker.io/ruslanmv/simple-ollama-environment:latest
+# or a specific release:
+docker pull docker.io/ruslanmv/simple-ollama-environment:v0.1.0
+````
+
+**GHCR**
+
+```bash
+docker pull ghcr.io/ruslanmv/simple-ollama-environment:latest
+# or a specific release:
+docker pull ghcr.io/ruslanmv/simple-ollama-environment:v0.1.0
+```
+
+> Multi-arch (linux/amd64, linux/arm64) manifests are published by the GitHub Actions pipelines.
+
+---
+
+### Run Jupyter + Ollama
+
+**CPU mode (works everywhere):**
+
+```bash
+docker run -d --name simple-ollama-env \
+  -p 8888:8888 -p 11434:11434 \
+  -v "$PWD":/workspace \
+  -v ollama_models:/root/.ollama \
+  docker.io/ruslanmv/simple-ollama-environment:latest
+# Jupyter → http://localhost:8888
+# Ollama API → http://localhost:11434
+```
+
+**GPU mode (CUDA on Linux with NVIDIA drivers + Container Toolkit):**
+
+```bash
+docker run -d --name simple-ollama-env-gpu \
+  --gpus all \
+  -p 8888:8888 -p 11434:11434 \
+  -v "$PWD":/workspace \
+  -v ollama_models:/root/.ollama \
+  docker.io/ruslanmv/simple-ollama-environment:latest
+```
+
+> On macOS/Windows, Docker Desktop GPU passthrough is limited — prefer CPU run above.
+
+---
+
+### Pulling new LLMs
+
+**A) Pull at container start (recommended):**
+
+```bash
+docker run -d --name simple-ollama-env \
+  -p 8888:8888 -p 11434:11434 \
+  -e OLLAMA_PREPULL="llama3.2:1b mistral" \
+  -v "$PWD":/workspace \
+  -v ollama_models:/root/.ollama \
+  docker.io/ruslanmv/simple-ollama-environment:latest
+```
+
+**B) Pull on demand (inside a running container):**
+
+```bash
+docker exec -it simple-ollama-env ollama pull llama3.2:1b
+docker exec -it simple-ollama-env ollama pull mistral
+```
+
+**C) (Optional) Bake models into a custom image (build locally):**
+
+```bash
+docker build -t simple-ollama-environment:custom \
+  --build-arg PREPULL="llama3.2:1b mistral" .
+```
+
+---
+
+### Quick sanity checks
+
+**CLI versions**
+
+```bash
+docker run --rm docker.io/ruslanmv/simple-ollama-environment:v0.1.0 python --version
+docker run --rm docker.io/ruslanmv/simple-ollama-environment:v0.1.0 jupyter --version
+```
+
+**Ollama health**
+
+```bash
+curl http://localhost:11434/api/tags
+# should return JSON once the container is up
+```
+### Option C — Local (Virtualenv + Host Ollama)
 
 1) Install everything (Python deps + Jupyter kernel + **host Ollama** best-effort):
 ```bash
@@ -68,16 +164,6 @@ make install-ollama     # attempts OS-specific install
 ollama pull qwen2.5:0.5b-instruct
 ```
 
-## 🐳  Option C: Remote Docker (prebuilt images)
-
-### Pull the main image
-
-**Docker Hub**
-```bash
-docker pull docker.io/ruslanmv/simple-ollama-environment:latest
-# or a specific release:
-docker pull docker.io/ruslanmv/simple-ollama-environment:v0.1.0
-```
 ---
 
 ## 🧪 Example Inference (from the notebook)
@@ -90,6 +176,8 @@ Open **`notebooks/ollama_quickstart.ipynb`** and run the cells. It will:
 The Python client talks to **http://localhost:11434**.
 
 ---
+
+
 
 ## Customization
 
